@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 Blio = "87855aa7-8b24-49b4-b316-97c011f78d17"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DirWalkers = "e22505fa-d5cb-4f7b-9088-d54cc7e0689e"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
@@ -15,6 +16,7 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
 Blio = "0.6.7"
+DataFrames = "1.7.0"
 Dates = "1.11.0"
 DirWalkers = "0.4.0"
 Distributed = "1.11.0"
