@@ -120,12 +120,15 @@ function run_appender(db, outq; filetab="bfr5files", anttab="bfr5ants", beamtab=
     beamappender = DuckDB.Appender(db, beamtab)
 
     @info "writing records to database"
-    fileid = 1
+    fileid = 0
+    antcount = 0
+    beamcount = 0
     try
         for row in outq
             row === nothing && break
 
             # Use fileid for id column
+            fileid += 1
             DuckDB.append(fileappender, fileid)
 
             # Append columns for fields of row, which must be a BFR5.File
@@ -143,6 +146,7 @@ function run_appender(db, outq; filetab="bfr5files", anttab="bfr5ants", beamtab=
                     DuckDB.append(antappender, getfield(ant, i))
                 end
                 DuckDB.end_row(antappender)
+                antcount += 1
             end
 
             # Append rows to bfr5beamw table
@@ -154,9 +158,9 @@ function run_appender(db, outq; filetab="bfr5files", anttab="bfr5ants", beamtab=
                     DuckDB.append(beamappender, getfield(beam, i))
                 end
                 DuckDB.end_row(beamappender)
+                beamcount += 1
             end
 
-            fileid += 1
             if fileid % 100_000 == 0
                 @info "found $fileid files so far ($(now()-start))"
             end
@@ -168,19 +172,19 @@ function run_appender(db, outq; filetab="bfr5files", anttab="bfr5ants", beamtab=
     end
     @info "done writing rows to database"
 
-    fileid
+    fileid, antcount, beamcount
 end
 
 #---
 # Run dirwalker database appender
 
-rowcount = run_appender(db, outq)
+filecount, antcount, beamcount = run_appender(db, outq)
 
 #---
 # Get stats for the tasks
 
 #stats = map(futures->fetch.(futures), fetch.(fetch(runtask)))
-dagent_results, fagent_results = fetch(runtask) .|> DataFrame
+dir_agent_stats, file_agent_stats = fetch(runtask) .|> DataFrame
 
 #---
 # Get stop time and compute elapsed
@@ -188,3 +192,8 @@ dagent_results, fagent_results = fetch(runtask) .|> DataFrame
 stop = now()
 elapsed = canonicalize(stop - start)
 @info "total elapsed time: $elapsed"
+@info "created $(filecount) file rows, $(antcount) ant rows, $(beamcount) beam rows"
+@info "dir agent stats"
+println(dir_agent_stats)
+@info "file agent stats"
+println(file_agent_stats)

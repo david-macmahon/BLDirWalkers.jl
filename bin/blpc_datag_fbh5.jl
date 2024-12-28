@@ -81,7 +81,7 @@ db = DBI.connect(DuckDB.DB, dbfile)
 
 tabname = "fbh5files"
 
-@info "creating table $tabname for FilH5Header records"
+@info "creating table $tabname for FBH5.Header records"
 DuckDB.register_data_frame(db, StructArray{FBH5.Header}(undef, 0), "mockfilh5")
 DBI.execute(db, "create table $tabname as select 1 as 'id', * from mockfilh5")
 #DBI.execute(db, "alter table $tabname add primary key (id)")
@@ -129,12 +129,12 @@ end
 #---
 # Run dirwalker database appender
 
-rowcount = run_appender(db, tabname, outq)
+filecount = run_appender(db, tabname, outq)
 
 #---
 # Get stats for the tasks
 
-dagent_results, fagent_results = fetch(runtask) .|> DataFrame
+dir_agent_stats, file_agent_stats = fetch(runtask) .|> DataFrame
 
 #---
 # Get stop time and compute elapsed
@@ -142,3 +142,8 @@ dagent_results, fagent_results = fetch(runtask) .|> DataFrame
 stop = now()
 elapsed = canonicalize(stop - start)
 @info "total elapsed time: $elapsed"
+@info "created $(filecount) file rows"
+@info "dir agent stats"
+println(dir_agent_stats)
+@info "file agent stats"
+println(file_agent_stats)
