@@ -8,7 +8,6 @@ using DuckDB, DataFrames
 using DuckDB: DBInterface as DBI
 using StructArrays
 import Base: n_avail
-#import Pkg
 
 #---
 # Start workers
@@ -65,7 +64,7 @@ outq = RemoteOutQueue{FBH5.Header}(; sz=Inf)
 dagentspec = 4*Sys.CPU_THREADS
 fagentspec = workers() ∩ ws # Take intersection in case some workers...
 extraspec = workers() ∩ xws # ...were removed for misbehaving
-runtask = start_dirwalker(
+runtask = Threads.@spawn run_dirwalker(
     FBH5.filefunc, dirq, fileq, outq, topdirs;
     filepred=FBH5.filepred, dagentspec, fagentspec, extraspec
 )

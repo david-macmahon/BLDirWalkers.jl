@@ -8,7 +8,6 @@ using DuckDB, DataFrames
 using DuckDB: DBInterface as DBI
 using StructArrays
 import Base: n_avail
-#import Pkg
 
 #---
 # Start workers
@@ -71,7 +70,7 @@ outq = RemoteOutQueue{BFR5.File}(; sz=Inf)
 dagentspec = 1
 fagentspec = workers()
 extraspec = []
-runtask = start_dirwalker(
+runtask = Threads.@spawn run_dirwalker(
     BFR5.filefunc, dirq, fileq, outq, topdirs;
     filepred=BFR5.filepred, dagentspec, fagentspec, extraspec
 )

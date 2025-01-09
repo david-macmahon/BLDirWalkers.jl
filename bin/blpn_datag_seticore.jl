@@ -8,7 +8,6 @@ using DuckDB, DataFrames
 using DuckDB: DBInterface as DBI
 using StructArrays
 import Base: n_avail
-#import Pkg
 
 #---
 # Start workers
@@ -79,7 +78,7 @@ outq = RemoteOutQueue{Vector{<:Seticore.AbstractCapnpInfo}}(; sz=Inf)
 dagentspec = Sys.CPU_THREADS ÷ 2
 fagentspec = workers()
 extraspec = []
-runtask = start_dirwalker(
+runtask = Threads.@spawn run_dirwalker(
     Seticore.filefunc, dirq, fileq, outq, topdirs;
     filepred=Seticore.filepred, dagentspec, fagentspec, extraspec
 )

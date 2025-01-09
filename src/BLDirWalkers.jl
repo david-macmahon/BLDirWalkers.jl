@@ -1,10 +1,10 @@
 module BLDirWalkers
 
-using DirWalkers: start_dirwalker
+using DirWalkers: run_dirwalker
 using DirWalkers: DirQueue, FileQueue, OutQueue
 using DirWalkers: RemoteDirQueue, RemoteFileQueue, RemoteOutQueue
 
-export start_dirwalker
+export run_dirwalker
 export DirQueue, FileQueue, OutQueue
 export RemoteDirQueue, RemoteFileQueue, RemoteOutQueue
 
