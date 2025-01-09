@@ -26,6 +26,17 @@ import Base: n_avail
 # Due to the remote nature of `/datag` and the imbalance in per-host data
 # volumes it is probably best not to limit workers to their own
 # /datag/<hostname> directory.
+#
+# Due to the "silo" nature of the gluster volumes at MeerKAT, each silo (i.e.
+# pair of racks) needs its own `dirq` and `fileq`.  To ensure the data are all
+# coaleced, a single `outq` is desired.
+#
+# This script starts multiple remote worker processes per host on a
+# silo-by-silo basis.  The first worker of each silo will be a diragent, the
+# rest will be file agents.  This script can be run on any host, but the
+# database is written to `/datag/users/seticoredb` (which must exist!) so it's
+# best to run on a processing node in the "silo" corresponding to the storage
+# node on which the database should be created.
 
 ENV["JULIA_WORKER_TIMEOUT"] = 120.0
 
@@ -38,16 +49,29 @@ function start_workers(workerspec; prjdir=dirname(@__DIR__))
     )
 end
 
-myhost = gethostname()
-#workerspec = [("blpn$i", :auto) for i in 0:15]
-workerspec = ["blpc3"] # For TESTing at Berkeley data center
+silospecs = [
+    [("blpn$i", :auto) for i in 0:15],      # /datag0 "silo"
+    [("blpn$i", :auto) for i in 16:31],     # /datag1 "silo"
+    [("blpn$i", :auto) for i in 32:47],     # /datag2 "silo"
+    [("blpn$i", :auto) for i in 48:63],     # /datag3 "silo"
+    [("blpn$i", :auto) for i in 64:2:78],   # /datag4 "silo"
+    [("blpn$i", :auto) for i in 80:2:94],   # /datag4 "silo"
+    [("blpn$i", :auto) for i in 96:2:110],  # /datag4 "silo"
+    [("blpn$i", :auto) for i in 112:2:126], # /datag4 "silo"
+]
+#silospecs = [ # For TESTing at Berkeley data center
+#    [("blpc3", 2)],
+#    [("blpc3", 2)]
+#]
 
 @info "starting workers"
 oversubcribe = 2
 #@time ws = start_workers(workerspec)
-@time ws = reduce(vcat, start_workers(workerspec) for _ in 1:oversubcribe)
+@time silows = map(silospecs) do hostspecs
+    reduce(vcat, start_workers(hostspecs) for _ in 1:oversubcribe)
+end
 
-@info "$(length(ws)) workers started"
+@info "$(sum(length, silows)) workers started"
 
 #---
 # Initialize workers
@@ -59,37 +83,39 @@ oversubcribe = 2
 #---
 # Set topdirs
 
-#topdirs = ["/datag0/bfr5_archive"]
-topdirs = ["/datax/scratch/jwst-test"] # For TESTing at Berkeley data center
+topdirs = ["/datag/blpn$i" for i in Iterators.flatten((0:63, 64:2:126))]
+#topdirs = ["/datax/scratch/jwst-test"] # For TESTing at Berkeley data center
 
 #---
 # Create DirWalker queues.
 # dirq is non-remote, but fileq and outq are remote.
 
-dirq = DirQueue(Inf)
-fileq = RemoteFileQueue(; sz=Inf)
+# Make RemoteDirQueues and RemoteFilesQueues on first worker of each silo
+dirqs = [RemoteDirQueue(ws[1]; sz=Inf) for ws in silows]
+fileqs = [RemoteFileQueue(ws[1]; sz=Inf) for ws in silows]
 outq = RemoteOutQueue{Vector{<:Seticore.AbstractCapnpInfo}}(; sz=Inf)
 
 #---
-# Start DirWalker
+# Start DirWalkers
 
-# filefunc (e.g. getheader) and filepred (e.g. isfilh5) must be defined
-# @everywhere!
-dagentspec = Sys.CPU_THREADS ÷ 2
-fagentspec = workers()
-extraspec = []
-runtask = Threads.@spawn run_dirwalker(
-    Seticore.filefunc, dirq, fileq, outq, topdirs;
-    filepred=Seticore.filepred, dagentspec, fagentspec, extraspec
-)
+# filefunc and filepred must be defined @everywhere!
+runtasks = map(zip(silows, dirqs, fileqs)) do (ws, dirq, fileq)
+    @spawnat ws[1] run_dirwalker(
+        Seticore.filefunc, dirq, fileq, outq, topdirs;
+        filepred=Seticore.filepred,
+        dagentspec=ws[1:1],
+        fagentspec=ws[2:end],
+        extraspec=[]
+    )
+end
 
 #---
-# Connect to database and create table from first record
+# Connect to database and create tables
 
 @info "create new database"
 # connect to database (for main task)
-#dbfile = "/datag0/bfr5_archive/bfr5files.duckdb"
-dbfile = "/datax/scratch/davidm/filedb/seticorefiles.duckdb" # TESTing
+dbfile = "/datag/users/seticoredb/seticorefiles.duckdb"
+#dbfile = "/datax/scratch/davidm/filedb/seticorefiles.duckdb" # TESTing
 rm(dbfile; force=true)
 db = DBI.connect(DuckDB.DB, dbfile)
 
@@ -127,7 +153,7 @@ end
 For each AbstractCapnp item from `outq`, append a row to proper table in
 database `db`.
 """
-function run_appender(db, outq; hittab="seticorehits", stamptab="seticorestamps")
+function run_appender(db, outq, npending=1; hittab="seticorehits", stamptab="seticorestamps")
     # Create Appenders append rows to database for each item in outq
     hitappender = DuckDB.Appender(db, hittab)
     stampappender = DuckDB.Appender(db, stamptab)
@@ -138,6 +164,8 @@ function run_appender(db, outq; hittab="seticorehits", stamptab="seticorestamps"
     try
         for itemvec in outq
             if itemvec === nothing
+                npending -= 1
+                npending > 0 && continue
                 break
             elseif itemvec isa Vector{Seticore.HitInfo}
                 # Use hitid for id column
@@ -157,7 +185,7 @@ function run_appender(db, outq; hittab="seticorehits", stamptab="seticorestamps"
         DuckDB.close(hitappender)
         DuckDB.close(stampappender)
     end
-    @info "done writing rows to database"
+    @info "done writing records to database"
 
     hitid, stampid
 end
@@ -165,13 +193,16 @@ end
 #---
 # Run dirwalker database appender
 
-hitcount, stampcount = run_appender(db, outq)
+npending = length(runtasks)
+hitcount, stampcount = run_appender(db, outq, npending)
 
 #---
 # Get stats for the tasks
 
 #stats = map(futures->fetch.(futures), fetch.(fetch(runtask)))
-dir_agent_stats, file_agent_stats = fetch(runtask) .|> DataFrame
+silostats = map(stats->DataFrame.(stats), fetch.(runtasks))
+dagentstats = mapreduce(first, vcat, silostats)
+fagentstats = mapreduce(last, vcat, silostats)
 
 #---
 # Get stop time and compute elapsed
@@ -180,7 +211,7 @@ stop = now()
 elapsed = canonicalize(stop - start)
 @info "total elapsed time: $elapsed"
 @info "created $(hitcount) hit rows, $(stampcount) stamp rows"
-@info "dir agent stats"
-println(dir_agent_stats)
-@info "file agent stats"
-println(file_agent_stats)
+@info "dir agent stats (per silo)"
+println(dagentstats)
+@info "file agent stats (per silo)"
+println(fagentstats)
