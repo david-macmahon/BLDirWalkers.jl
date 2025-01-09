@@ -1,7 +1,7 @@
 name = "BLDirWalkers"
 uuid = "6a509200-22eb-4fc1-8f7b-aaaa882abf02"
 authors = ["David MacMahon <davidm@astro.berkeley.edu>"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 Blio = "87855aa7-8b24-49b4-b316-97c011f78d17"
