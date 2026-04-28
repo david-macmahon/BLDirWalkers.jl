@@ -16,10 +16,10 @@ Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
 [compat]
-Blio = "0.6.7"
+Blio = "0.6.15"
 DataFrames = "1.7.0"
 Dates = "1.10,1.11.0"
-DirWalkers = "0.6.0"
+DirWalkers = "0.6.0,0.7.0,0.8.0"
 Distributed = "1.10,1.11.0"
 DuckDB = "1.1.0"
 HDF5 = "0.17.2"

@@ -1,13 +1,15 @@
-### Filterbank/HDF5 headers
+### Filterbank/HDF5 headers (including derived from GuppiRaw headers)
 
 module FBH5
 
 using Blio, HDF5
 
+const RAW_SUFFIX = ".raw"
 const FIL_SUFFIX = ".fil"
 const HDF5_SUFFIX_RE = r"\.(h5|hdf5|fbh5|hdf)$"
 
 isfilh5(f) = endswith(f, FIL_SUFFIX) || contains(f, HDF5_SUFFIX_RE)
+israwfilh5(f) = endswith(f, RAW_SUFFIX) || isfilh5(f)
 
 # Define FilH5Header struct to ensure that columns ordering is consistent
 struct Header
@@ -65,6 +67,11 @@ function convert_attribute(::Type{Union{Missing,T}}, v) where T
     return v
 end
 
+function nfpc_by_heuristic(foff)
+    # Compute nfpc for Green Bank files as Int32 to match FBH5's nfpc type
+    round(Int32, 187.5/64/abs(foff))
+end
+
 function get_h5header(fname)
     try
         fieldmap = Dict(string.(fieldnames(Header)).=>fieldtypes(Header))
@@ -78,11 +85,11 @@ function get_h5header(fname)
                 v isa Array && continue
                 push!(pairs, Symbol(k) => convert_attribute(fieldmap[k], v))
             end
-            #if !haskey(attrs, "nfpc")
-            #    foff = convert_attribute(fieldmap["foff"], attrs["foff"][])
-            #    # Compute nfpc for Green Bank files as Int32 to match FBH5's nfpc type
-            #    push!(pairs, :nfpc => round(Int32, 187.5/64/abs(foff)))
-            #end
+            if !haskey(attrs, "nfpc") && haskey(attrs, "foff")
+                foff = convert_attribute(fieldmap["foff"], attrs["foff"][])
+                # Compute nfpc by heuristic
+                push!(pairs, :nfpc => nfpc_by_heuristic(foff))
+            end
             elsize = sizeof(eltype(data))
             push!(pairs, :data_size => elsize * prod(size(data)))
             push!(pairs, :nsamps => size(data, ndims(data)))
@@ -98,9 +105,15 @@ end
 
 function get_fbheader(fbname)
     try
-        fbh = open(io->read(io, Filterbank.Header), fbname)
-        # Compute nfpc for Green Bank files as Int32 to match FBH5's nfpc type
-        fbh[:nfpc] = round(Int32, 187.5/64/abs(fbh[:foff]))
+        fbh = if endswith(fbname, RAW_SUFFIX)
+            open(io->read(io, GuppiRaw.Header), fbname) |> Filterbank.Header
+        else
+            open(io->read(io, Filterbank.Header), fbname)
+        end
+        if haskey(fbh, :foff)
+            # Compute nfpc by heuristic
+            fbh[:nfpc] = nfpc_by_heuristic(fbh[:foff])
+        end
         # Delete redundant fields to match FBH5 headers
         delete!(fbh, :barycentric)
         delete!(fbh, :header_size)
@@ -117,7 +130,7 @@ end
 
 
 function get_header(fname)
-    nt = endswith(fname, FIL_SUFFIX) ? get_fbheader(fname) : get_h5header(fname)
+    nt = endswith(fname, FIL_SUFFIX) || endswith(fname, RAW_SUFFIX) ? get_fbheader(fname) : get_h5header(fname)
     Header(; nt...)
 end
 
