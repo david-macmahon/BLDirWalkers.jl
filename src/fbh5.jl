@@ -134,8 +134,8 @@ function get_header(fname)
     Header(; nt...)
 end
 
-# For use with `start_dirwalkers`
+# For use with `run_dirwalkers`
 filepred = isfilh5
-filefunc = get_header
+filefunc = tuple∘get_header
 
 end # module FBH5
