@@ -135,7 +135,7 @@ function get_header(fname)
 end
 
 # For use with `run_dirwalkers`
-filepred = isfilh5
+filepred = israwfilh5
 filefunc = tuple∘get_header
 
 end # module FBH5
