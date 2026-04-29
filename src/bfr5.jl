@@ -131,8 +131,8 @@ function get_bfr5file(bfr5name::String)
     end
 end
 
-# For use with `start_dirwalkers`
+# For use with `run_dirwalker`
 filepred = isbfr5
-filefunc = get_bfr5file
+filefunc = tuple∘get_bfr5file
 
 end # module FBH5
