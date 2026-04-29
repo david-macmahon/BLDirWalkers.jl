@@ -85,19 +85,19 @@ end
 
 function load_seticorefile(::Type{Hit}, hostname, filename)
     reader = CapnpReader(SeticoreCapnp.nodata_index_factory, Hit, filename)
-    map(reader) do (hit, fileindex)
+    Iterators.map(reader) do (hit, fileindex)
         HitInfo(; NamedTuple(hit)..., fileindex, hostname, filename)
     end
 end
 
 function load_seticorefile(::Type{Stamp}, hostname, filename)
     reader = CapnpReader(SeticoreCapnp.nodata_index_factory, Stamp, filename)
-    map(reader) do (stamp, fileindex)
+    Iterators.map(reader) do (stamp, fileindex)
         StampInfo(; NamedTuple(stamp)..., fileindex, hostname, filename)
     end
 end
 
-function load_seticorefile(filename)
+function load_seticorefile(filename, partition_size=100_000)
     if endswith(filename, HITS_SUFFIX)
         T = Hit
     elseif endswith(filename, STAMPS_SUFFIX)
@@ -106,10 +106,11 @@ function load_seticorefile(filename)
         error("unsupported extension: $filename")
     end
 
-    load_seticorefile(T, gethostname(), filename)
+    lazy_map = load_seticorefile(T, gethostname(), filename)
+    Iterators.partition(lazy_map, partition_size)
 end
 
-# For use with `start_dirwalkers`
+# For use with `run_dirwalker`
 filepred = isseticore
 filefunc = load_seticorefile
 
