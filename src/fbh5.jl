@@ -106,7 +106,11 @@ end
 function get_fbheader(fbname)
     try
         fbh = if endswith(fbname, RAW_SUFFIX)
-            open(io->read(io, GuppiRaw.Header), fbname) |> Filterbank.Header
+            grh = open(io->read(io, GuppiRaw.Header), fbname)
+            blocsize = get(grh, :blocsize, 1)
+            datasize = fld(filesize(fbname), blocsize) * blocsize
+            rawdatafile = basename(fbname)
+            Filterbank.Header(grh; datasize, rawdatafile)
         else
             open(io->read(io, Filterbank.Header), fbname)
         end
