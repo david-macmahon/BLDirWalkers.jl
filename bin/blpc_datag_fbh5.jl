@@ -98,10 +98,11 @@ function run_appender(db, tabname, outq)
     appender = DuckDB.Appender(db, tabname)
 
     @info "writing records to database"
-    rowcount = 1
+    rowcount = 0
     try
-        for row in outq
-            row === nothing && break
+        for row in Iterators.takewhile(!isnothing, outq)
+            # Increment rowcount
+            rowcount += 1
 
             # Use rowcount for id column
             DuckDB.append(appender, rowcount)
@@ -112,7 +113,6 @@ function run_appender(db, tabname, outq)
             end
             DuckDB.end_row(appender)
 
-            rowcount += 1
             if rowcount % 100_000 == 0
                 @info "found $rowcount files so far ($(now()-start))"
             end
