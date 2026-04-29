@@ -78,7 +78,7 @@ dbfile = "/datax/scratch/davidm/filedb/fbh5files.duckdb"
 rm(dbfile; force=true)
 db = DBI.connect(DuckDB.DB, dbfile)
 
-tabname = "fbh5files"
+tabname = "fbh5rawfiles"
 
 @info "creating table $tabname for FBH5.Header records"
 DuckDB.register_data_frame(db, StructArray{FBH5.Header}(undef, 0), "mockfilh5")
