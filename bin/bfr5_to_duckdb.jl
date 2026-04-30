@@ -2,8 +2,6 @@ using Dates
 start = now()
 
 using BLDirWalkers
-#using Sockets
-#using DuckDB, DataFrames
 using DuckDB
 using DuckDB: DBInterface as DBI
 using StructArrays

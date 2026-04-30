@@ -4,7 +4,7 @@ start = now(UTC)
 using BLDirWalkers
 using Distributed
 #using Sockets
-using DuckDB, DataFrames
+using DuckDB
 using DuckDB: DBInterface as DBI
 using StructArrays
 #import Base: n_avail
@@ -254,7 +254,7 @@ rowcount = fetch(appender_task) - 1
 #---
 # Get stats for the tasks
 
-#dir_agent_stats, file_agent_stats = fetch(runtask) .|> DataFrame
+#dir_agent_stats, file_agent_stats = fetch(runtask) .|> StructArray
 
 #---
 # Get stop time and compute elapsed

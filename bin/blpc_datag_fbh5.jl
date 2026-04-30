@@ -4,7 +4,7 @@ start = now()
 using BLDirWalkers
 using Distributed
 using Sockets
-using DuckDB, DataFrames
+using DuckDB
 using DuckDB: DBInterface as DBI
 using StructArrays
 import Base: n_avail
@@ -133,7 +133,7 @@ filecount = run_appender(db, tabname, outq)
 #---
 # Get stats for the tasks
 
-dir_agent_stats, file_agent_stats = fetch(runtask) .|> DataFrame
+dir_agent_stats, file_agent_stats = fetch(runtask) .|> StructArray
 
 #---
 # Get stop time and compute elapsed
