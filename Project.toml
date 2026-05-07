@@ -1,7 +1,7 @@
 name = "BLDirWalkers"
 uuid = "6a509200-22eb-4fc1-8f7b-aaaa882abf02"
 authors = ["David MacMahon <davidm@astro.berkeley.edu>"]
-version = "0.3.0"
+version = "0.4.0-dev"
 
 [deps]
 Blio = "87855aa7-8b24-49b4-b316-97c011f78d17"
@@ -19,7 +19,7 @@ StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 Blio = "0.6.17"
 DataFrames = "1.7.0"
 Dates = "1.10,1.11.0"
-DirWalkers = "0.8.0"
+DirWalkers = "0.9.0"
 Distributed = "1.10,1.11.0"
 DuckDB = "1.5.2"
 HDF5 = "0.17.2"

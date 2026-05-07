@@ -1,12 +1,12 @@
 module BLDirWalkers
 
-using DirWalkers: run_dirwalker
-using DirWalkers: DirQueue, FileQueue, OutQueue
-using DirWalkers: RemoteDirQueue, RemoteFileQueue, RemoteOutQueue
+using DirWalkers: run_dirwalker, nitems, qsize, qstatus, unixms, workerhostpid
+using DirWalkers: TopQueue, DirQueue, FileQueue, OutQueue
+using DirWalkers: RemoteTopQueue, RemoteDirQueue, RemoteFileQueue, RemoteOutQueue
 
 export run_dirwalker
-export DirQueue, FileQueue, OutQueue
-export RemoteDirQueue, RemoteFileQueue, RemoteOutQueue
+export TopQueue, DirQueue, FileQueue, OutQueue
+export RemoteTopQueue, RemoteDirQueue, RemoteFileQueue, RemoteOutQueue
 
 export FBH5
 export BFR5
