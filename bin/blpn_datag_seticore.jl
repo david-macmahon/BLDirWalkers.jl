@@ -21,6 +21,8 @@ nthreads < 7 && error("refusing to run with fewer than 7 threads (nthreads=$nthr
 #---
 # Start workers
 #
+# TODO Bring this long comment up to date!
+#
 # For BLUSE at MeerKAT, the hits and stamps files are archived under
 # `/datag<N>/<hostname>/data/`.  On each compute/processing node this is
 # symlnked as `/datag/<hostname>/data`.  Using a `topdirs` directory list that
@@ -71,20 +73,10 @@ silohosts = [
     ["blpn$i" for i in 112:2:126], # /datag7 "silo"
 ]
 
-silospecs = [[(h, :auto) for h in silo] for silo in silohosts]
-#=
-silospecs = [
-    [("blpn$i", :auto) for i in 0:15],      # /datag0 "silo"
-    [("blpn$i", :auto) for i in 16:31 if i != 24], # /datag1
-    [("blpn$i", :auto) for i in 32:47],     # /datag2 "silo"
-    [("blpn$i", :auto) for i in 48:63],     # /datag3 "silo"
-    [("blpn$i", :auto) for i in 64:2:78],   # /datag4 "silo"
-    [("blpn$i", :auto) for i in 80:2:94],   # /datag5 "silo"
-    [("blpn$i", :auto) for i in 96:2:110],  # /datag6 "silo"
-    [("blpn$i", :auto) for i in 112:2:126], # /datag7 "silo"
-]
-=#
+workersperhost = 4 # :auto
+silospecs = [[(h, workersperhost) for h in silo] for silo in silohosts]
 
+# TODO Make testing work at the data center
 #=
 silospecs = [ # For TESTing at Berkeley data center
     [("blpc3", 2)],
@@ -93,20 +85,21 @@ silospecs = [ # For TESTing at Berkeley data center
 =#
 
 @info "starting workers"
-oversubcribe = 2
+oversubcribe = 1
 
 @time begin
     silows = map(silospecs) do hostspecs
         reduce(vcat, start_workers(hostspecs) for _ in 1:oversubcribe)
     end
+
     # Start queue worker processes on remote hosts
-    # qws is dimensioned [nsilos, 4]
-    # topqs=qws[:,1] run on worker on first host of each silo
-    # dirqs=qws[:,2] run on worker on second host of each silo
-    # fileqs=qws[:,3] run on worker on third host of each silo
-    # outqs=qws[:,4] run on worker on fourth host of each silo
+    # qws is dimensioned [4, nsilos]
+    # topqs=qws[1,:] run on worker on first host of each silo
+    # dirqs=qws[2,:] run on worker on second host of each silo
+    # fileqs=qws[3,:] run on worker on third host of each silo
+    # outqs=qws[4,:] run on worker on fourth host of each silo
     qws = mapreduce(hcat, silohosts) do silo
-        start_workers(silo[1:4]; exeflags(threads=:auto)...)
+        start_workers(silo[2:5]; exeflags(threads=:auto)...)
     end
 end
 
@@ -134,11 +127,6 @@ end
         println(io, join(fieldnames(T), ","))
     end
 
-    # Using a Union ensures that v contains all the same type
-    function writeobjects(io, v::Vector{T}) where T<:Union{HitInfo,StampInfo}
-        CSV.write(io, StructArray(v); append=true)
-    end
-
     """
         output_handler(outdir, outq, progress_channel)
 
@@ -151,7 +139,7 @@ end
         iohits = open(joinpath(outdir, "hits.$hostname.csv"), "w")
         iostamps = open(joinpath(outdir, "stamps.$hostname.csv"), "w")
 
-        @info "writing to output files"
+        put!(progress_channel, (; hostname, msg="writing to output files"))
         hitcount = 0
         stampcount = 0
         try
@@ -159,7 +147,7 @@ end
             writeheader(iostamps, StampInfo)
 
             for items in Iterators.takewhile(!isnothing, outq)
-                io = if eltype(items) == HitInfo
+                io = if typeof(items[1]) == HitInfo
                     # Increment hitcount
                     hitcount += length(items)
                     iohits
@@ -169,7 +157,7 @@ end
                     iostamps
                 end
 
-                writeobjects(io, items)
+                CSV.write(io, items; append=true)
 
                 if (hitcount + stampcount) % 100 == 0
                     put!(progress_channel, (; time=unixms(), hostname, hitcount, stampcount))
@@ -181,7 +169,7 @@ end
         end
 
         put!(progress_channel, (; time=unixms(), hostname, hitcount, stampcount, final=true))
-        @info "$hostname done writing to output files ($hitcount, $stampcount)"
+        put!(progress_channel, (; hostname, msg="done writing to output files"))
 
         hitcount, stampcount
     end
@@ -191,6 +179,7 @@ end
 #---
 # Set topdirs
 
+#topdirs = ["/datag/mattl"]
 topdirs = ["/datag/blpn$i" for i in Iterators.flatten((0:63, 64:2:126))]
 #topdirs = ["/datax/scratch/jwst-test"] # For TESTing at Berkeley data center
 
@@ -200,10 +189,10 @@ outdir = "/datag/inventory"
 # Create DirWalker queues and progress_channel.
 
 # Make RemoteQueues on queue workers of each silo
-topqs = map(qw->RemoteTopQueue(qw; sz=Inf), qws[:,1])
-dirqs = map(qw->RemoteDirQueue(qw; sz=Inf), qws[:,2])
-fileqs = map(qw->RemoteFileQueue(qw; sz=Inf), qws[:,3])
-outqs = map(qw->RemoteOutQueue{Vector{<:Seticore.AbstractCapnpInfo}}(qw; sz=Inf), qws[:,4])
+topqs = map(qw->RemoteTopQueue(qw; sz=Inf), qws[1,:])
+dirqs = map(qw->RemoteDirQueue(qw; sz=Inf), qws[2,:])
+fileqs = map(qw->RemoteFileQueue(qw; sz=Inf), qws[3,:])
+outqs = map(qw->RemoteOutQueue{Vector}(qw; sz=Inf), qws[4,:])
 
 # Output handlers will post progress updates here
 progress_channel = RemoteChannel(()->Channel{NamedTuple}(Inf))
@@ -213,14 +202,14 @@ progress_channel = RemoteChannel(()->Channel{NamedTuple}(Inf))
 
 # Log worker hosts/PIDs
 open(joinpath(@__DIR__, "workers.txt"), "w") do io
-    println(io, "topqs on ", join(workerhostpid.(qws[:,1])), " ")
-    println(io, "dirqs on ", join(workerhostpid.(qws[:,2])), " ")
-    println(io, "fileqs on ", join(workerhostpid.(qws[:,3])), " ")
-    println(io, "outqs on ", join(workerhostpid.(qws[:,4])), " ")
+    println(io, "topqs on ", join(workerhostpid.(qws[1,:])), " ")
+    println(io, "dirqs on ", join(workerhostpid.(qws[2,:])), " ")
+    println(io, "fileqs on ", join(workerhostpid.(qws[3,:])), " ")
+    println(io, "outqs on ", join(workerhostpid.(qws[4,:])), " ")
 end
 
 # filefunc and filepred must be defined @everywhere!
-dwfutures = map(zip(silows, topqs, dirqs, fileqs, outqs)) do (ws, topq, dirq, fileq, outq)
+dwfutures = map(silows, topqs, dirqs, fileqs, outqs) do ws, topq, dirq, fileq, outq
     @spawnat ws[1] run_dirwalker(
         Seticore.filefunc, topq, dirq, fileq, outq, topdirs;
         filepred=Seticore.filepred,
@@ -234,7 +223,7 @@ end
 # Run output_handler on oqworkers
 
 # Run output_handler on out queue worker
-outputfutures = map(qws[:,4], outqs) do oqworker, outq
+outputfutures = map(qws[4,:], outqs) do oqworker, outq
     @spawnat oqworker output_handler(outdir, outq, progress_channel)
 end
 
@@ -335,24 +324,47 @@ progresstask = Threads.@spawn begin
     for nt in Iterators.takewhile(!isempty, progress_channel)
         println(nt)
     end
-end
+end |> errormonitor
+
+#---
+# Start qstatus monitor
+
+qstatustask = Threads.@spawn begin
+    t0 = unixms()
+    ticks = 0
+    while !istaskdone(progresstask)
+        if ticks == 100
+            for (silo, qs) in enumerate(zip(topqs, dirqs, fileqs, outqs))
+                qstatus(; time=unixms()-t0, silo, qs...)
+            end
+            ticks = 0
+        end
+
+        sleep(0.1)
+        tick += 1
+    end
+end |> errormonitor
 
 #---
 # Wait for completions
 
+# TODO Fetch futures in tasks and then wait/fetch on the tasks
+
 #Get stats for the tasks
 silostats = fetch.(dwfutures)
-#stats = map(futures->fetch.(futures), fetch.(fetch(runtask)))
-#silostats = map(stats->DataFrame.(stats), fetch.(dwfutures))
-#dagentstats = mapreduce(first, vcat, silostats)
-#fagentstats = mapreduce(last, vcat, silostats)
+ndirs = getindex.(silostats, 1)
+dagentstats = StructArray.(getindex.(silostats, 2))
+fagentstats = StructArray.(getindex.(silostats, 3))
 
 # Get results freom outputfutures
 hitstampcounts = fetch.(outputfutures)
+hitscounts = first.(hitstampcounts)
+stampscounts = last.(hitstampcounts)
 
 # Inform progress task that the show is over
 put!(progress_channel, (;))
 wait(progresstask)
+wait(qstatustask)
 
 #---
 # Get stop time and compute elapsed
@@ -360,7 +372,7 @@ wait(progresstask)
 stop = now()
 elapsed = canonicalize(stop - start)
 @info "total elapsed time: $elapsed"
-@info "output handler stats" hitstampcounts
+@info "output handler stats" hitscounts stampscounts
 #=
 @info "dir agent stats (per silo)"
 println(dagentstats)
